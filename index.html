@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>乌兹别克语转写工具 - 基里尔文/拉丁文转换</title>
+    <style>
+        /* 样式部分与之前保持完全一致 */
+        :root { --primary-color: #2c3e50; --secondary-color: #3498db; --background: #f5f6fa; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.6; margin: 0; padding: 20px; background-color: var(--background); color: var(--primary-color); }
+        .container { max-width: 1000px; margin: 0 auto; background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); padding: 30px; }
+        .converter-header { text-align: center; margin-bottom: 30px; }
+        .converter-header h1 { color: var(--primary-color); margin: 0; font-size: 2.2em; }
+        .converter-body { display: grid; grid-template-columns: 1fr 180px 1.1fr; gap: 20px; align-items: center; }
+        .text-box { width: 100%; height: 250px; padding: 15px; border: 2px solid #ddd; border-radius: 8px; resize: vertical; font-size: 16px; transition: border-color 0.3s ease; }
+        .text-box:focus { outline: none; border-color: var(--secondary-color); }
+        .controls { display: flex; flex-direction: column; gap: 15px; align-items: center; }
+        button { padding: 12px 24px; background-color: var(--secondary-color); color: white; border: none; border-radius: 6px; cursor: pointer; transition: transform 0.2s, background-color 0.3s; }
+        button:hover { background-color: #2980b9; transform: translateY(-1px); }
+        select { padding: 10px; border-radius: 6px; border: 2px solid #ddd; width: 100%; font-size: 14px; }
+        .swap-btn { background: none; color: var(--primary-color); font-size: 24px; padding: 10px; }
+        .result-box { margin-left: auto; margin-right: 15px; width: calc(100% - 20px); }
+        .copy-btn { position: absolute; bottom: 10px; right: 10px; padding: 8px 12px; font-size: 12px; }
+        @media (max-width: 768px) { .result-box { margin: 0 10px; width: auto; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="converter-header">
+            <h1>乌兹别克语转写工具</h1>
+            <p>基里尔字母 ⇄ 拉丁字母双向转换</p>
+        </div>
+        <div class="converter-body">
+            <div class="input-box">
+                <textarea id="inputText" class="text-box" placeholder="在此输入文本..." autofocus></textarea>
+            </div>
+            <div class="controls">
+                <select id="direction">
+                    <option value="cyr2lat">基里尔文 → 拉丁文</option>
+                    <option value="lat2cyr">拉丁文 → 基里尔文</option>
+                </select>
+                <button onclick="convertText()">转换</button>
+                <button class="swap-btn" onclick="swapDirection()">⇅</button>
+            </div>
+            <div class="result-box">
+                <textarea id="outputText" class="text-box" placeholder="转换结果..." readonly></textarea>
+                <button class="copy-btn" onclick="copyResult()">复制</button>
+            </div>
+        </div>
+        <div class="instructions">
+            <h3>特性说明：</h3>
+            <ul>
+                <li>首字母E/e自动转为Э/э</li>
+                <li>支持Ғ/Ў/Қ等特殊字符</li>
+                <li>智能处理Ts/Ch/Sh等复合字符</li>
+                <li>实时响应输入变化</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        class UzbekTransliterator {
+            constructor() {
+                this.initMappings();
+            }
+
+            initMappings() {
+                // 基里尔→拉丁映射（保持不变）
+                this.cyrToLat = {
+                    'А':'A','а':'a','Б':'B','б':'b','В':'V','в':'v','Г':'G','г':'g',
+                    'Д':'D','д':'d','Е':'E','е':'e','Ё':'Yo','ё':'yo','Ж':'J','ж':'j',
+                    'З':'Z','з':'z','И':'I','и':'i','Й':'Y','й':'y','К':'K','к':'k',
+                    'Л':'L','л':'l','М':'M','м':'m','Н':'N','н':'n','О':'O','о':'o',
+                    'П':'P','п':'p','Р':'R','р':'r','С':'S','с':'s','Т':'T','т':'t',
+                    'У':'U','у':'u','Ф':'F','ф':'f','Х':'X','х':'x','Ц':'Ts','ц':'ts',
+                    'Ч':'Ch','ч':'ch','Ш':'Sh','ш':'sh','Ъ':"'",'ъ':"'",'Ь':'','ь':'',
+                    'Э':'E','э':'e','Ю':'Yu','ю':'yu','Я':'Ya','я':'ya','Қ':'Q','қ':'q',
+                    'Ғ':"Gʻ",'ғ':"gʻ",'Ҳ':'H','ҳ':'h','Ў':"Oʻ",'ў':"oʻ"
+                };
+
+                // 调整后的拉丁→基里尔映射
+                this.latToCyr = {
+                    'A':'А','a':'а','B':'Б','b':'б','D':'Д','d':'д',
+                    'E':'Е','e':'е',  // 非首字母默认映射
+                    'F':'Ф','f':'ф','G':'Г','g':'г','H':'Ҳ','h':'ҳ',
+                    'I':'И','i':'и','J':'Ж','j':'ж','K':'К','k':'к',
+                    'L':'Л','l':'л','M':'М','m':'м','N':'Н','n':'н',
+                    'O':'О','o':'о','P':'П','p':'п','Q':'Қ','q':'қ',
+                    'R':'Р','r':'р','S':'С','s':'с','T':'Т','t':'т',
+                    'U':'У','u':'у','V':'В','v':'в','X':'Х','x':'х',
+                    'Y':'Й','y':'й','Z':'З','z':'з',
+                    "'":'ъ','ʻ':'ъ','’':'ъ','ʼ':'ъ'
+                };
+
+                // 特殊组合处理顺序（调整优先级）
+                this.cyrSpecial = [['Еъ','Eʼ'],['еъ','eʼ']];
+                this.latSpecial = [
+                    ['Gʻ','Ғ'],['gʻ','ғ'],    // 优先处理带ʻ的字符
+                    ['Oʻ','Ў'],['oʻ','ў'],
+                    ['Ts','Ц'],['TS','Ц'],['ts','ц'],
+                    ['Ch','Ч'],['CH','Ч'],['ch','ч'],
+                    ['Sh','Ш'],['SH','Ш'],['sh','ш'],
+                    ['Yo','Ё'],['YO','Ё'],['yo','ё'],
+                    ['Yu','Ю'],['YU','Ю'],['yu','ю'],
+                    ['Ya','Я'],['YA','Я'],['ya','я'],
+                    ['E','Е'], ['e','е']      // 最后处理普通E/e
+                ];
+            }
+
+            // 精确处理首字母E/e
+            processInitialE(text) {
+                // 匹配单词边界（包括开头/标点后的E/e）
+                return text.replace(/(^|[\s\W])([Ee])/g, (match, prefix, letter) => {
+                    return prefix + (letter === 'E' ? 'Э' : 'э');
+                });
+            }
+
+            convert(text, mapping, specialCases) {
+                let result = [];
+                let i = 0;
+                const maxLen = Math.max(...specialCases.map(x => x[0].length));
+                
+                while (i < text.length) {
+                    let found = false;
+                    // 优先处理最长匹配
+                    for (let len = Math.min(maxLen, text.length - i); len > 0; len--) {
+                        const slice = text.substr(i, len);
+                        for (const [src, tgt] of specialCases) {
+                            if (slice === src) {
+                                result.push(tgt);
+                                i += len;
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (found) break;
+                    }
+                    if (!found) {
+                        result.push(mapping[text[i]] || text[i]);
+                        i++;
+                    }
+                }
+                return result.join('');
+            }
+
+            cyrToLatin(text) {
+                return this.convert(text, this.cyrToLat, this.cyrSpecial);
+            }
+
+            latToCyrillic(text) {
+                // 分步处理确保转换顺序
+                const step1 = this.processInitialE(text);          // 首字母转换
+                const step2 = this.convert(step1, {}, this.latSpecial); // 特殊组合
+                const step3 = this.convert(step2, this.latToCyr, []);   // 基础字符
+                return step3;
+            }
+        }
+
+        // 实例化转换器
+        const transliterator = new UzbekTransliterator();
+
+        // DOM操作函数
+        function convertText() {
+            const input = document.getElementById('inputText').value;
+            const direction = document.getElementById('direction').value;
+            const output = direction === 'cyr2lat' 
+                ? transliterator.cyrToLatin(input)
+                : transliterator.latToCyrillic(input);
+            document.getElementById('outputText').value = output;
+        }
+
+        function swapDirection() {
+            const select = document.getElementById('direction');
+            select.value = select.value === 'cyr2lat' ? 'lat2cyr' : 'cyr2lat';
+            convertText();
+        }
+
+        function copyResult() {
+            const output = document.getElementById('outputText');
+            output.select();
+            document.execCommand('copy');
+            setTimeout(() => output.blur(), 100);
+        }
+
+        // 绑定实时输入事件
+        document.getElementById('inputText').addEventListener('input', convertText);
+        document.getElementById('direction').addEventListener('change', convertText);
+    </script>
+</body>
+</html>
